@@ -1,0 +1,136 @@
+{
+    "MNIST":{
+        "input_channels":1,
+        "img_size":28,
+        "num_classes":10,
+        "data_mean": [
+            0.1307
+        ],
+        "data_std": [
+            0.3081
+        ],
+        "classes":[
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9"
+        ]
+    },
+    "CIFAR10":{
+        "input_channels":3,
+        "img_size":32,
+        "num_classes":10,
+        "data_mean": [
+            0.4914,
+            0.4822,
+            0.4465
+        ],
+        "data_std": [
+            0.2470,
+            0.2435,
+            0.2616
+        ],
+        "classes":[
+            "plane",
+            "car",
+            "bird",
+            "cat",
+            "deer",
+            "dog",
+            "frog",
+            "horse",
+            "ship",
+            "truck"
+        ]
+    },
+    "STL10":{
+        "input_channels":3,
+        "img_size":96,
+        "num_classes":10,
+        "data_mean":[
+            0.5,
+            0.5,
+            0.5
+        ],
+        "data_std":[
+            1.0,
+            1.0,
+            1.0
+        ],
+        "classes":[
+            "airplane",
+            "bird",
+            "car",
+            "cat",
+            "deer",
+            "dog",
+            "horse",
+            "monkey",
+            "ship",
+            "truck"
+        ]
+    }, 
+    "FashionMNIST": {
+        "input_channels": 1,
+        "img_size": 28,
+        "num_classes": 10,
+        "data_mean": [
+            0.2860
+        ],
+        "data_std": [
+            0.3530
+        ],
+        "classes": [
+            "T-shirt/top",
+            "Trouser",
+            "Pullover",
+            "Dress",
+            "Coat",
+            "Sandal",
+            "Shirt",
+            "Sneaker",
+            "Bag",
+            "Ankle boot"
+        ]
+    },
+    "KMNIST": {
+        "input_channels": 1,
+        "img_size": 28,
+        "num_classes": 10,
+        "data_mean": [
+            0.1904
+        ],
+        "data_std": [
+            0.3475
+        ],
+        "classes": [
+            "o", "ki", "su", "tsu", "na", 
+            "ha", "ma", "ya", "re", "wo"
+        ]
+    },
+    "SVHN": {
+        "input_channels": 3,
+        "img_size": 32,
+        "num_classes": 10,
+        "data_mean": [
+            0.4377,
+            0.4438,
+            0.4728
+        ],
+        "data_std": [
+            0.1980,
+            0.2010,
+            0.1970
+        ],
+        "classes": [
+            "0", "1", "2", "3", "4", 
+            "5", "6", "7", "8", "9"
+        ]
+    }
+}
