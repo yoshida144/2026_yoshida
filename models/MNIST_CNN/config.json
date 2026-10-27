@@ -1,0 +1,30 @@
+{
+  "model_type": "EquivalentCNN",
+  "target_dataset": "MNIST",
+  "batch_size": 128,
+  "num_epochs": 10,
+  "learning_rate": 0.001,
+  "layer_specs": [
+    {
+      "dim": 16,
+      "kernel": 7,
+      "stride": 2,
+      "T": 4,
+      "prox": "on_sphere"
+    },
+    {
+      "dim": 32,
+      "kernel": 5,
+      "stride": 1,
+      "T": 4,
+      "prox": "group_on_sphere"
+    },
+    {
+      "dim": 128,
+      "kernel": 7,
+      "stride": 1,
+      "T": 4,
+      "prox": "group_on_sphere"
+    }
+  ]
+}
