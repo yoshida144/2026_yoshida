@@ -1,0 +1,37 @@
+{
+  "target_dataset": "CIFAR10",
+  "batch_size": 128,
+  "num_epochs": 30,
+  "learning_rate": 0.001,
+  "learning_rate_lambdas": 0.001,
+  "lambda_recon": 0.0003,
+  "lambda_sparse": 0.0001,
+  "lambda_dict": 0.0,
+  "lambda_group": 0.001,
+  "lambda_class": 0.0,
+  "method": "group",
+  "layer_specs": [
+    {
+      "dim": 64,
+      "kernel": 8,
+      "stride": 2,
+      "T": 4,
+      "prox": "on_sphere"
+    },
+    {
+      "dim": 128,
+      "kernel": 6,
+      "stride": 1,
+      "T": 4,
+      "prox": "group_on_sphere"
+    },
+    {
+      "dim": 512,
+      "kernel": 8,
+      "stride": 1,
+      "T": 4,
+      "prox": "group_on_sphere"
+    }
+  ],
+  "base_model": "None"
+}
