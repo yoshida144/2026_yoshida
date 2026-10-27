@@ -1,0 +1,30 @@
+{
+  "model_type": "EquivalentCNN",
+  "target_dataset": "CIFAR10",
+  "batch_size": 128,
+  "num_epochs": 30,
+  "learning_rate": 0.001,
+  "layer_specs": [
+    {
+      "dim": 64,
+      "kernel": 8,
+      "stride": 2,
+      "T": 4,
+      "prox": "on_sphere"
+    },
+    {
+      "dim": 128,
+      "kernel": 6,
+      "stride": 1,
+      "T": 4,
+      "prox": "group_on_sphere"
+    },
+    {
+      "dim": 512,
+      "kernel": 8,
+      "stride": 1,
+      "T": 4,
+      "prox": "group_on_sphere"
+    }
+  ]
+}
