@@ -3,7 +3,6 @@ import os
 import datetime
 import json
 import torch
-from torchvision import transforms
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
@@ -15,6 +14,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
+from utils import spike_penalty, build_loaders
 from model import ML_CSC_Image_Classification
 from utils import load_config, load_dataset, load_dataset_info
 
@@ -41,73 +41,16 @@ def train(device, params, model_path=None, save_model_name=None):
             'kernel': spec["kernel"],
             'stride': spec["stride"],
             'T': spec["T"],
+            'model': spec.get('model', 'lista'),
+            'lif': spec.get('lif', {}),
             'prox':spec["prox"]
         } for spec in params["layer_specs"]
     ]
 
-    dataset_info = load_dataset_info(TARGET_DATASET)
-    
+    train_loader, test_loader, dataset_info = build_loaders(params, classification=True)
     INPUT_CHANNELS = dataset_info["input_channels"]
-    IMG_SIZE = dataset_info["img_size"]
     NUM_CLASSES = dataset_info["num_classes"]
-    DATA_MEAN = dataset_info["data_mean"]
-    DATA_STD = dataset_info["data_std"]
 
-    # ============================================================
-    # Dataset
-    # ============================================================    
-    if TARGET_DATASET == "MNIST":
-        train_transform = transforms.Compose([
-            transforms.RandomAffine(
-                degrees=10,          # ±10度の回転
-                translate=(0.1, 0.1),# 上下左右に10%の移動
-                scale=(0.9, 1.1),    # 90%~110%の大きさ
-                fill=0               
-            ),
-            transforms.ToTensor(),
-            transforms.Normalize(DATA_MEAN, DATA_STD),
-        ])
-    elif TARGET_DATASET == "FashionMNIST" or TARGET_DATASET == "CIFAR10":
-        train_transform = transforms.Compose([
-            transforms.RandomCrop(IMG_SIZE, padding=4, padding_mode='reflect'),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize(DATA_MEAN, DATA_STD),
-        ])
-    else:
-        assert(TARGET_DATASET+"に対してデータ拡張が決められていません。")
-    
-    # データ拡張の部分は要注意！(データセットの性質で適切な拡張が変わるので)
-    
-    test_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(DATA_MEAN, DATA_STD),
-    ])
-    
-
-    train_dataset, test_dataset = load_dataset(
-        TARGET_DATASET, train_transform, test_transform
-    )
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-        pin_memory=True,
-        num_workers=0
-    )
-
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-        pin_memory=True,
-        num_workers=0
-    )
-
-    # ============================================================
-    # Model
-    # ============================================================
     model = ML_CSC_Image_Classification(
         input_channels=INPUT_CHANNELS,
         num_classes=NUM_CLASSES,
@@ -119,7 +62,7 @@ def train(device, params, model_path=None, save_model_name=None):
     if model_path is not None:
         if os.path.exists(model_path):
             print(f"Loading pre-trained model from: {model_path}")
-            model.load_state_dict(torch.load(model_path, map_location=DEVICE), strict=False)
+            model.load_state_dict(torch.load(model_path, map_location=DEVICE, weights_only=True), strict=True)
         else:
             print(f"Warning: Model path {model_path} not found. Starting from scratch.")
 
@@ -183,7 +126,7 @@ def train(device, params, model_path=None, save_model_name=None):
 
             optimizer.zero_grad(set_to_none=True)
 
-            with torch.amp.autocast('cuda'):
+            with torch.amp.autocast('cuda', enabled=DEVICE.type == 'cuda'):
                 logits, codes, _ = model(images)
 
                 loss_c = criterion_cls(logits, labels)
@@ -193,7 +136,7 @@ def train(device, params, model_path=None, save_model_name=None):
                 
                 layers_obj = model.feature_extractor.layers if hasattr(model, 'feature_extractor') else model.layers
                 
-                for l in range(len(layers_obj)):
+                for l in ([len(codes)-1] if params.get('reconstruction_loss') == 'final' else range(len(layers_obj))):
                     recon = model.decode(index=l, images=images, codes=codes)
                     
                     loss_r += F.mse_loss(recon, images) * N
@@ -225,6 +168,7 @@ def train(device, params, model_path=None, save_model_name=None):
                     + LAMBDA_GROUP * loss_g
                 )
                 
+            total_loss = total_loss + params.get('lambda_spike', 0.0) * spike_penalty(model)
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             
@@ -297,12 +241,9 @@ def train(device, params, model_path=None, save_model_name=None):
     save_dir = f"models/{dir_name}"
     os.makedirs(save_dir, exist_ok=True)
     
-    if save_model_name:
-        torch.save(model.state_dict(), f"{save_dir}/model.pth")
-    else:
-        torch.save(model.state_dict(), f"{save_dir}/{save_model_name}.pth")
-        
-    
+    checkpoint_name = save_model_name or "model"
+    torch.save(model.state_dict(), f"{save_dir}/{checkpoint_name}.pth")
+
     model_spec = {
         "target_dataset": TARGET_DATASET,
         "batch_size": BATCH_SIZE,
@@ -320,7 +261,7 @@ def train(device, params, model_path=None, save_model_name=None):
     }
 
     with open(f"{save_dir}/config.json", "w") as f:
-        json.dump(model_spec, f, indent=2)
+        json.dump({**params, **model_spec}, f, indent=2)
 
     with open(f"{save_dir}/training_log.json", "w") as f:
         json.dump(log, f, indent=2)
@@ -360,7 +301,11 @@ if __name__ == "__main__":
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
 
-    CONFIG_PATH = "./config.json"
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', default='./config.json')
+    args = parser.parse_args()
+    CONFIG_PATH = args.config
     params = load_config(CONFIG_PATH)
     
     # デフォルト動作 (引数なし)

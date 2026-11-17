@@ -2,36 +2,62 @@
   "target_dataset": "MNIST",
   "batch_size": 128,
   "num_epochs": 5,
-  "learning_rate": 0.1,
-  "learning_rate_lambdas": 0.01,
+  "learning_rate": 0.001,
+  "learning_rate_lambdas": 0.001,
   "lambda_recon": 1.0,
-  "lambda_sparse": 0.005,
+  "lambda_sparse": 0.0,
   "lambda_dict": 0.0,
-  "lambda_group": 0.005,
+  "lambda_group": 0.0,
   "lambda_class": 0.0,
-  "method": "group",
+  "method": "none",
   "layer_specs": [
     {
       "dim": 16,
       "kernel": 7,
       "stride": 2,
-      "T": 4,
-      "prox": "on_sphere"
+      "T": 3,
+      "prox": "no_cons",
+      "model": "lif_budget",
+      "lif": {
+        "beta": 0.9,
+        "theta": 1.0,
+        "delta": 0.1,
+        "surrogate_width": 2.0,
+        "event_budget": 1000
+      }
     },
     {
       "dim": 32,
       "kernel": 5,
       "stride": 1,
-      "T": 4,
-      "prox": "group_on_sphere"
+      "T": 3,
+      "prox": "no_cons",
+      "model": "lif_budget",
+      "lif": {
+        "beta": 0.9,
+        "theta": 1.0,
+        "delta": 0.1,
+        "surrogate_width": 2.0,
+        "event_budget": 1000
+      }
     },
     {
       "dim": 128,
       "kernel": 7,
       "stride": 1,
-      "T": 4,
-      "prox": "group_on_sphere"
+      "T": 3,
+      "prox": "no_cons",
+      "model": "lif_budget",
+      "lif": {
+        "beta": 0.9,
+        "theta": 1.0,
+        "delta": 0.1,
+        "surrogate_width": 2.0,
+        "event_budget": 1000
+      }
     }
   ],
-  "base_model": "None"
+  "base_model": "None",
+  "lambda_spike": 0.0,
+  "reconstruction_loss": "final"
 }
