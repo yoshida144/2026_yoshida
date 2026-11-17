@@ -3,7 +3,6 @@ import os
 import datetime
 import json
 import torch
-from torchvision import transforms
 import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
@@ -15,6 +14,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
+from utils import spike_penalty, build_loaders
 from model import ML_CSC_Reconstruction 
 from utils import load_config, load_dataset, load_dataset_info
 
@@ -43,53 +43,16 @@ def train_csr(device, params, model_path=None, save_model_name=None):
             'kernel': spec["kernel"],
             'stride': spec["stride"],
             'T': spec["T"],
+            'model': spec.get('model', 'lista'),
+            'lif': spec.get('lif', {}),
             'prox': spec["prox"]
         } for spec in params["layer_specs"]
     ]
 
-    dataset_info = load_dataset_info(TARGET_DATASET)
+    train_loader, test_loader, dataset_info = build_loaders(params, classification=False)
     INPUT_CHANNELS = dataset_info["input_channels"]
-    IMG_SIZE = dataset_info["img_size"]
-    DATA_MEAN = dataset_info["data_mean"]
-    DATA_STD = dataset_info["data_std"]
+    NUM_CLASSES = dataset_info["num_classes"]
 
-    # ============================================================
-    # Dataset
-    # ============================================================
-    train_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(DATA_MEAN, DATA_STD),
-    ])
-    
-    test_transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(DATA_MEAN, DATA_STD),
-    ])
-
-    train_dataset, test_dataset = load_dataset(
-        TARGET_DATASET, train_transform, test_transform
-    )
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-        pin_memory=True,
-        num_workers=0
-    )
-
-    test_loader = DataLoader(
-        test_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=False,
-        pin_memory=True,
-        num_workers=0
-    )
-
-    # ============================================================
-    # Model Initialization (CSR Model)
-    # ============================================================
-    print(f"Initializing CSR Model for {TARGET_DATASET}...")
     model = ML_CSC_Reconstruction(
         input_channels=INPUT_CHANNELS,
         layer_specs=LAYERS_SPECS,
@@ -99,7 +62,7 @@ def train_csr(device, params, model_path=None, save_model_name=None):
     if model_path is not None:
         if os.path.exists(model_path):
             print(f"Loading pre-trained model from: {model_path}")
-            model.load_state_dict(torch.load(model_path, map_location=DEVICE), strict=False)
+            model.load_state_dict(torch.load(model_path, map_location=DEVICE, weights_only=True), strict=True)
         else:
             print(f"Warning: Model path {model_path} not found. Starting from scratch.")
 
@@ -128,6 +91,7 @@ def train_csr(device, params, model_path=None, save_model_name=None):
     # ============================================================
     log = {
         "epoch": [],
+        "train_budget_counts": [],
         "train_mse": [],
         "test_mse": [],
         "loss_total": [],
@@ -143,6 +107,8 @@ def train_csr(device, params, model_path=None, save_model_name=None):
     for epoch in range(NUM_EPOCHS):
         print(f"Epoch [{epoch+1}/{NUM_EPOCHS}]")
         model.train()
+        budget_counts = [dict(budget_exceeded_steps=0, budget_rejected_candidates=0)
+                         for _ in model.feature_extractor.layers]
 
         epoch_loss_r = 0.0
         epoch_loss_s = 0.0
@@ -164,7 +130,7 @@ def train_csr(device, params, model_path=None, save_model_name=None):
             
             # 各層の再構成誤差を合計 (Multi-layer Reconstruction Loss)
             # D_l * z_l が Input に近づくようにする
-            for l in range(len(codes)):
+            for l in ([len(codes)-1] if params.get('reconstruction_loss') == 'final' else range(len(codes))):
                 # model.decode を使用 (ConvTranspose2d + OutputPadding)
                 recon_l = model.decode(index=l, images=images, codes=codes)
                 
@@ -195,6 +161,10 @@ def train_csr(device, params, model_path=None, save_model_name=None):
                 + LAMBDA_GROUP * loss_g
             )
             
+            total_loss = total_loss + params.get('lambda_spike', 0.0) * spike_penalty(model)
+            for counts, layer in zip(budget_counts, model.feature_extractor.layers):
+                for key in counts:
+                    counts[key] += getattr(layer, 'last_stats', {}).get(key, 0)
             total_loss.backward()
             
             # Gradient Clipping
@@ -214,7 +184,7 @@ def train_csr(device, params, model_path=None, save_model_name=None):
             
             # Monitor Final Layer Reconstruction Quality (MSE)
             with torch.no_grad():
-                final_recon = model.decode(len(codes)-1, images, codes)
+                final_recon = recon_l.detach()
                 epoch_mse_accum += F.mse_loss(final_recon, images).item()
 
             train_bar.set_postfix({
@@ -249,6 +219,7 @@ def train_csr(device, params, model_path=None, save_model_name=None):
 
         # Update Logs
         log["epoch"].append(epoch + 1)
+        log["train_budget_counts"].append(budget_counts)
         log["train_mse"].append(avg_train_mse)
         log["test_mse"].append(avg_test_mse)
         log["loss_total"].append(epoch_loss_total / len(train_loader))
@@ -280,7 +251,7 @@ def train_csr(device, params, model_path=None, save_model_name=None):
     }
 
     with open(f"{save_dir}/config.json", "w") as f:
-        json.dump(model_spec, f, indent=2)
+        json.dump({**params, **model_spec}, f, indent=2)
 
     with open(f"{save_dir}/training_log.json", "w") as f:
         json.dump(log, f, indent=2)
@@ -315,11 +286,20 @@ def train_csr(device, params, model_path=None, save_model_name=None):
 
 
 if __name__ == "__main__":
+    if '--evaluate-events' in sys.argv:
+        sys.argv.remove('--evaluate-events')
+        from evaluate_events import main
+        main()
+        sys.exit(0)
     torch.backends.cudnn.benchmark = True
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {DEVICE}")
 
-    CONFIG_PATH = "./config_ml_csr.json"
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', default='./config_ml_csr.json')
+    args = parser.parse_args()
+    CONFIG_PATH = args.config
     params = load_config(CONFIG_PATH)
     
     train_csr(device=DEVICE, params=params, save_model_name="model_csr")

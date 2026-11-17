@@ -16,7 +16,7 @@ DictionaryProx = Callable[
     torch.Tensor
 ]
 
-class LISTALayer(nn.Module):
+class DenseLISTALayer(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride, T, prox_func_name = "st_on_sphere", method = "group"):
         super().__init__()
         self.in_channels = in_channels
@@ -144,6 +144,12 @@ class LISTALayer(nn.Module):
         
         self.dictionary.data = self.prox_func_dictionary(self.dictionary.data, threshold)
         
+from snn import LIFMixin, BudgetLIFLayer
+
+class LISTALayer(LIFMixin, DenseLISTALayer):
+    pass
+
+
 class LISTA_ML_CSC(nn.Module):
     def __init__(self, input_channels, num_classes, layer_specs, method = "group"):
         super().__init__()
@@ -154,7 +160,9 @@ class LISTA_ML_CSC(nn.Module):
         
         for spec in layer_specs:
             
-            layer = LISTALayer(
+            layer_class = {'lista': DenseLISTALayer, 'lif': LISTALayer,
+                           'lif_budget': BudgetLIFLayer}[spec.get('model', 'lista')]
+            layer = layer_class(
                 in_channels=current_in,
                 out_channels=spec['dim'],
                 kernel_size=spec['kernel'],
@@ -163,6 +171,8 @@ class LISTA_ML_CSC(nn.Module):
                 prox_func_name=spec['prox'],
                 method=method
             )
+            if hasattr(layer, 'configure_lif'):
+                layer.configure_lif(spec.get('lif', {}))
             self.layers.append(layer)
             current_in = spec['dim']
             
@@ -366,6 +376,8 @@ class ML_CSC_Image_Classification(nn.Module):
         self.final_classifier.weight.data *= scale.unsqueeze(0)
 
     def get_pruned_model(self, layer_idx, filter_indices):
+        if any(isinstance(l, (LIFMixin, BudgetLIFLayer)) for l in self.feature_extractor.layers):
+            raise NotImplementedError('Legacy pruning is not supported for LIF weights; use event inference instead.')
         new_model = copy.deepcopy(self)
         target_layer = new_model.feature_extractor.layers[layer_idx]
         
@@ -440,9 +452,17 @@ class ML_CSC_Reconstruction(nn.Module):
         return self.feature_extractor.get_effective_dictionary(layer_idx) 
     
     def decode_single_layer(self, index, code, target_shape):
-        return self.feature_extractor.decode_single_layer(index, code, target_shape)
+        layer = self.feature_extractor.layers[index]
+        h, w = target_shape[-2:]
+        ih, iw = code.shape[-2:]
+        op = (h - ((ih-1)*layer.stride-2*layer.padding+layer.kernel_size),
+              w - ((iw-1)*layer.stride-2*layer.padding+layer.kernel_size))
+        return F.conv_transpose2d(code, layer.dictionary, stride=layer.stride,
+                                 padding=layer.padding, output_padding=op)
     
     def get_pruned_model(self, layer_idx, filter_indices):
+        if any(isinstance(l, (LIFMixin, BudgetLIFLayer)) for l in self.feature_extractor.layers):
+            raise NotImplementedError('Legacy pruning is not supported for LIF weights; use event inference instead.')
         new_model = copy.deepcopy(self)
         target_layer = new_model.feature_extractor.layers[layer_idx]
         
