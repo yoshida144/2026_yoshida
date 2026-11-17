@@ -355,6 +355,7 @@ def main(argv=None):
     correct = samples = elements = 0
     squared_error = raw_squared_error = 0.0
     spikes = opportunities = 0
+    budget_exceeded_steps = budget_rejected_candidates = 0
     misclassified = []
     torch.manual_seed(43)
     with torch.no_grad():
@@ -383,6 +384,8 @@ def main(argv=None):
                 stats = getattr(layer, 'last_stats', {})
                 spikes += stats.get('spikes', 0)
                 opportunities += stats.get('opportunities', 0)
+                budget_exceeded_steps += stats.get('budget_exceeded_steps', 0)
+                budget_rejected_candidates += stats.get('budget_rejected_candidates', 0)
             samples += len(images)
         if samples == 0:
             raise ValueError('Empty evaluation dataset')
@@ -415,6 +418,8 @@ def main(argv=None):
         'psnr_db_unclipped_unit_range': float(-10*np.log10(max(raw_mse,1e-30))),
         'accuracy': correct/samples if is_classifier else None,
         'spike_rate': spikes/opportunities if opportunities else None,
+        'budget_exceeded_steps': budget_exceeded_steps,
+        'budget_rejected_candidates': budget_rejected_candidates,
         'misclassified_visualized': misclassified,
         'notes': ['No noise is generated. Input and reconstruction target are the loaded image.',
                   'Filter panels are individually contrast-normalized visualizations, not numerical accuracy evidence.',

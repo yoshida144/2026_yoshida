@@ -250,6 +250,8 @@ class BudgetLIFLayer(nn.Module):
         signal = drive
         remaining = torch.full((y.shape[0],), self.event_budget, device=y.device, dtype=torch.long)
         used_total = torch.zeros_like(remaining)
+        exceeded_steps = torch.zeros_like(remaining)
+        rejected_total = torch.zeros_like(remaining)
         event_macs = dense_recurrent = steps = 0
         spike_loss = drive.sum() * 0
         for t in range(self.T):
@@ -259,6 +261,11 @@ class BudgetLIFLayer(nn.Module):
                 signal = drive + F.conv2d(z, self.Wz, padding=1) - z
             potential = self.beta * v + self.input_gain * signal
             candidate = signed_spike(potential, self.theta, self.surrogate_width)
+            candidate_count = candidate.detach().ne(0).flatten(1).sum(1)
+            # Exhausted images are inactive; do not count hypothetical later spikes.
+            excess = (candidate_count - remaining).clamp(min=0) * (remaining > 0)
+            exceeded_steps = exceeded_steps + (excess > 0).long()
+            rejected_total = rejected_total + excess
             mask = select_event_mask(candidate.detach(), potential.detach().abs() - self.theta, remaining)
             spike = candidate * mask
             used = spike.detach().ne(0).flatten(1).sum(1)
@@ -290,6 +297,10 @@ class BudgetLIFLayer(nn.Module):
         self.last_stats = dict(spikes=spikes, opportunities=opportunities,
             spike_rate=spikes/max(opportunities, 1), steps=steps,
             spikes_per_image=used_total.tolist(), event_budget=self.event_budget,
+            budget_exceeded_steps=int(exceeded_steps.sum()),
+            budget_rejected_candidates=int(rejected_total.sum()),
+            budget_exceeded_steps_per_image=exceeded_steps.tolist(),
+            budget_rejected_candidates_per_image=rejected_total.tolist(),
             dense_recurrent_macs_estimate=dense_recurrent,
             event_recurrent_macs=event_macs if self.execution_mode == 'event' else None,
             fixed_dense_macs_estimate=2*z.numel()*self.in_channels*self.kernel_size**2,

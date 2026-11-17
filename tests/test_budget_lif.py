@@ -103,6 +103,19 @@ class BudgetTests(unittest.TestCase):
             with torch.no_grad():
                 torch.testing.assert_close(clone(x)[0], model(x)[0])
 
+    def test_budget_counters_exact(self):
+        layer = BudgetLIFLayer(1, 1, 1, 1, 3).double().eval()
+        layer.configure_lif(dict(theta=0.1, event_budget=2))
+        with torch.no_grad():
+            layer.Wy.fill_(1)
+            layer(torch.ones(2, 1, 2, 2, dtype=torch.double))
+        stats = layer.last_stats
+        self.assertEqual(stats['budget_exceeded_steps_per_image'], [1, 1])
+        self.assertEqual(stats['budget_rejected_candidates_per_image'], [2, 2])
+        self.assertEqual(stats['budget_exceeded_steps'], 2)
+        self.assertEqual(stats['budget_rejected_candidates'], 4)
+        self.assertEqual(stats['spikes_per_image'], [2, 2])
+
     def test_event_requires_inference(self):
         layer = self.layer()
         layer.execution_mode = 'event'

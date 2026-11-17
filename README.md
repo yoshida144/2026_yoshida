@@ -93,3 +93,15 @@ python -m unittest discover -s tests -v
 ```
 
 合成入力による数値検証であり、MNIST等での学習精度検証は別途必要。
+
+## 発火予算の超過記録
+
+`budget_exceeded_steps` は、発火候補数が残り予算を超えた画像×層×時刻の件数。
+`budget_rejected_candidates` は、その際に不採用になった候補の総数。
+予算と候補数が等しい場合は超過に数えない。予算切れで停止した画像の
+その後の仮想的な発火は計算・計上しない。実際の採用発火は予算以下に制限される。
+
+学習時は `training_log.json` の `train_budget_counts` にエポック別・層別の
+合計を保存。評価時は `event_evaluation.json` のdense/event各metricsと、
+`test.py` の `evaluation_summary.json` に画像・層を合計した件数を保存する。
+各層の `last_stats` には直近バッチの画像別件数も保持する。

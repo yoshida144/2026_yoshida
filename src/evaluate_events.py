@@ -39,7 +39,7 @@ def main():
     model.load_state_dict(torch.load(args.checkpoint,map_location=device,weights_only=True),strict=True)
     model.eval()
     accumulator={m:dict(seconds=0.,mse_sum=0.,raw_squared_error=0.,elements=0,correct=0,samples=0,
-        spikes=0,opportunities=0,dense_recurrent_macs_estimate=0,event_recurrent_macs=0) for m in ('dense','event')}
+        spikes=0,opportunities=0,budget_exceeded_steps=0,budget_rejected_candidates=0,dense_recurrent_macs_estimate=0,event_recurrent_macs=0) for m in ('dense','event')}
     max_output_difference=0.; mismatched_code_elements=0
     with torch.no_grad():
         for i,(clean,labels) in enumerate(loader):
@@ -67,8 +67,8 @@ def main():
                 if cls:metrics['correct']+=int((final.argmax(1)==labels).sum())
                 for layer in model.feature_extractor.layers:
                     stats=layer.last_stats
-                    for key in ('spikes','opportunities','dense_recurrent_macs_estimate','event_recurrent_macs'):
-                        metrics[key]+=stats[key] or 0
+                    for key in ('spikes','opportunities','budget_exceeded_steps','budget_rejected_candidates','dense_recurrent_macs_estimate','event_recurrent_macs'):
+                        metrics[key]+=stats.get(key, 0) or 0
                 outputs[mode]=(final,codes,reconstruction)
             max_output_difference=max(max_output_difference,float((outputs['dense'][2]-outputs['event'][2]).abs().max()))
             mismatched_code_elements+=sum(int((a!=b).sum()) for a,b in zip(outputs['dense'][1],outputs['event'][1]))

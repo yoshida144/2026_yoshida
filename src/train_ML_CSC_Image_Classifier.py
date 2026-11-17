@@ -92,6 +92,7 @@ def train(device, params, model_path=None, save_model_name=None):
     # ============================================================
     log = {
         "epoch": [],
+        "train_budget_counts": [],
         "train_acc": [],
         "test_acc": [],
         "loss_total": [],
@@ -108,6 +109,8 @@ def train(device, params, model_path=None, save_model_name=None):
     for epoch in range(NUM_EPOCHS):
         print(f"Epoch [{epoch+1}/{NUM_EPOCHS}]")
         model.train()
+        budget_counts = [dict(budget_exceeded_steps=0, budget_rejected_candidates=0)
+                         for _ in model.feature_extractor.layers]
 
         epoch_loss_c = 0.0
         epoch_loss_r = 0.0
@@ -169,6 +172,9 @@ def train(device, params, model_path=None, save_model_name=None):
                 )
                 
             total_loss = total_loss + params.get('lambda_spike', 0.0) * spike_penalty(model)
+            for counts, layer in zip(budget_counts, model.feature_extractor.layers):
+                for key in counts:
+                    counts[key] += getattr(layer, 'last_stats', {}).get(key, 0)
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             
@@ -225,6 +231,7 @@ def train(device, params, model_path=None, save_model_name=None):
 
         # ---- log ----
         log["epoch"].append(epoch + 1)
+        log["train_budget_counts"].append(budget_counts)
         log["train_acc"].append(train_acc)
         log["test_acc"].append(test_acc)
         log["loss_total"].append(epoch_loss_total / len(train_loader))

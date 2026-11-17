@@ -91,6 +91,7 @@ def train_csr(device, params, model_path=None, save_model_name=None):
     # ============================================================
     log = {
         "epoch": [],
+        "train_budget_counts": [],
         "train_mse": [],
         "test_mse": [],
         "loss_total": [],
@@ -106,6 +107,8 @@ def train_csr(device, params, model_path=None, save_model_name=None):
     for epoch in range(NUM_EPOCHS):
         print(f"Epoch [{epoch+1}/{NUM_EPOCHS}]")
         model.train()
+        budget_counts = [dict(budget_exceeded_steps=0, budget_rejected_candidates=0)
+                         for _ in model.feature_extractor.layers]
 
         epoch_loss_r = 0.0
         epoch_loss_s = 0.0
@@ -159,6 +162,9 @@ def train_csr(device, params, model_path=None, save_model_name=None):
             )
             
             total_loss = total_loss + params.get('lambda_spike', 0.0) * spike_penalty(model)
+            for counts, layer in zip(budget_counts, model.feature_extractor.layers):
+                for key in counts:
+                    counts[key] += getattr(layer, 'last_stats', {}).get(key, 0)
             total_loss.backward()
             
             # Gradient Clipping
@@ -213,6 +219,7 @@ def train_csr(device, params, model_path=None, save_model_name=None):
 
         # Update Logs
         log["epoch"].append(epoch + 1)
+        log["train_budget_counts"].append(budget_counts)
         log["train_mse"].append(avg_train_mse)
         log["test_mse"].append(avg_test_mse)
         log["loss_total"].append(epoch_loss_total / len(train_loader))
