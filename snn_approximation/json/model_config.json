@@ -1,0 +1,10 @@
+{
+  "target_dataset": "CIFAR10",
+  "teacher_directory": "models/CIFAR10_GROUP",
+  "seed": 42,
+  "threads": 6,
+  "skipped_updates": 2,
+  "approximate_layers": [
+    3
+  ]
+}

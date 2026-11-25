@@ -1,0 +1,5 @@
+{
+  "test_images": 1024,
+  "batch_size": 16,
+  "skip_ablation": false
+}
