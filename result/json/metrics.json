@@ -1,0 +1,31 @@
+{
+  "device": "cpu",
+  "threads": 6,
+  "seed": 42,
+  "fit_images": 384,
+  "test_images": 10000,
+  "epochs": 8,
+  "test_batch_size": 16,
+  "original_updates": 12,
+  "approximate_layers": [
+    3
+  ],
+  "skipped_updates_per_layer": 1,
+  "fast_updates": 11,
+  "snn_checkpoint": "C:\\Users\\yoshidakousei\\2026_yoshida-main\\models\\SNN\\snn_update.pth",
+  "fast_accuracy_delta": 0.006899999920278788,
+  "fast_accuracy_delta_approx_95_ci": [
+    0.0046097538687288764,
+    0.009190245971828699
+  ],
+  "accuracy": {
+    "original": 0.6898000240325928,
+    "fast": 0.6966999769210815
+  },
+  "forward_seconds": {
+    "original": 1116.393369800062,
+    "fast": 866.256866700016
+  },
+  "fast_speedup": 1.2887555789923315,
+  "relative_code_l2_error": {}
+}
